@@ -1,6 +1,7 @@
 import 'conflict_resolver.dart';
 import 'local_store.dart';
 import 'retry_queue.dart';
+import 'sync_metadata.dart';
 import 'sync_record.dart';
 import 'sync_result.dart';
 
@@ -25,6 +26,11 @@ class SyncEngine {
 
   /// The result of the last sync operation, or `null` if no sync has run.
   SyncResult? lastSyncResult;
+
+  SyncMetadata _metadata = const SyncMetadata();
+
+  /// Cumulative sync statistics across all sync cycles.
+  SyncMetadata get metadata => _metadata;
 
   bool _isSyncing = false;
 
@@ -58,6 +64,7 @@ class SyncEngine {
     }
 
     _isSyncing = true;
+    final stopwatch = Stopwatch()..start();
 
     try {
       var pushedCount = 0;
@@ -134,6 +141,8 @@ class SyncEngine {
       completedSteps += pullSteps;
       onProgress?.call(completedSteps, totalSteps);
 
+      stopwatch.stop();
+
       final result = SyncResult(
         pushed: pushedCount,
         pulled: pulledCount,
@@ -142,6 +151,126 @@ class SyncEngine {
       );
 
       lastSyncResult = result;
+      _metadata = _metadata.copyWith(
+        lastSyncAt: DateTime.now(),
+        lastDuration: stopwatch.elapsed,
+        totalPushes: _metadata.totalPushes + pushedCount,
+        totalPulls: _metadata.totalPulls + pulledCount,
+        totalConflicts: _metadata.totalConflicts + conflictCount,
+      );
+      return result;
+    } finally {
+      _isSyncing = false;
+    }
+  }
+
+  /// Run a selective sync cycle, pushing only records that match [predicate].
+  ///
+  /// Works like [sync] but filters pending records through [predicate]
+  /// before pushing. Pull and conflict resolution work the same way.
+  Future<SyncResult> syncWhere(
+    bool Function(SyncRecord) predicate, {
+    required Future<List<String>> Function(List<SyncRecord> records) push,
+    required Future<List<SyncRecord>> Function() pull,
+    SyncProgressCallback? onProgress,
+  }) async {
+    if (_isSyncing) {
+      return const SyncResult();
+    }
+
+    _isSyncing = true;
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      var pushedCount = 0;
+      var pulledCount = 0;
+      var conflictCount = 0;
+      var retriedCount = 0;
+
+      // Total steps: push matching + retry queued + pull
+      const pullSteps = 1;
+      final pendingRecords =
+          store.pending().where(predicate).toList();
+      final queuedRecords = retryQueue.dequeueAll();
+      final totalSteps =
+          pendingRecords.length + queuedRecords.length + pullSteps;
+      var completedSteps = 0;
+
+      // Step 1: Push matching pending records
+      if (pendingRecords.isNotEmpty) {
+        try {
+          final pushedIds = await push(pendingRecords);
+          for (final id in pushedIds) {
+            store.markSynced(id);
+          }
+          pushedCount = pushedIds.length;
+
+          for (final record in pendingRecords) {
+            if (!pushedIds.contains(record.id)) {
+              retryQueue.enqueue(record);
+            }
+          }
+        } catch (_) {
+          for (final record in pendingRecords) {
+            retryQueue.enqueue(record);
+          }
+        }
+      }
+      completedSteps += pendingRecords.length;
+      onProgress?.call(completedSteps, totalSteps);
+
+      // Step 2: Retry queued records
+      if (queuedRecords.isNotEmpty) {
+        try {
+          final retriedIds = await push(queuedRecords);
+          for (final id in retriedIds) {
+            store.markSynced(id);
+          }
+          retriedCount = retriedIds.length;
+        } catch (_) {
+          for (final record in queuedRecords) {
+            retryQueue.enqueue(record);
+          }
+        }
+      }
+      completedSteps += queuedRecords.length;
+      onProgress?.call(completedSteps, totalSteps);
+
+      // Step 3: Pull remote records
+      final remoteRecords = await pull();
+      for (final remote in remoteRecords) {
+        final local = store.get(remote.id);
+        if (local != null &&
+            local.status != SyncStatus.synced &&
+            local.data.toString() != remote.data.toString()) {
+          final resolved = resolver.resolve(local, remote);
+          store.put(resolved);
+          conflictCount++;
+        } else {
+          store.put(remote.withStatus(SyncStatus.synced));
+          pulledCount++;
+        }
+      }
+      completedSteps += pullSteps;
+      onProgress?.call(completedSteps, totalSteps);
+
+      stopwatch.stop();
+
+      final result = SyncResult(
+        pushed: pushedCount,
+        pulled: pulledCount,
+        conflicts: conflictCount,
+        retried: retriedCount,
+      );
+
+      lastSyncResult = result;
+      _metadata = _metadata.copyWith(
+        lastSyncAt: DateTime.now(),
+        lastDuration: stopwatch.elapsed,
+        totalPushes: _metadata.totalPushes + pushedCount,
+        totalPulls: _metadata.totalPulls + pulledCount,
+        totalConflicts: _metadata.totalConflicts + conflictCount,
+      );
       return result;
     } finally {
       _isSyncing = false;

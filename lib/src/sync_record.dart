@@ -19,8 +19,8 @@ enum SyncStatus {
 /// A record tracked by the sync engine.
 ///
 /// Each record has a unique [id], arbitrary [data], a [status] indicating
-/// its sync state, an [updatedAt] timestamp, and a [version] for conflict
-/// detection.
+/// its sync state, an [updatedAt] timestamp, a [version] for conflict
+/// detection, and optional [tags] for categorization.
 class SyncRecord {
   /// The unique identifier for this record.
   final String id;
@@ -37,6 +37,9 @@ class SyncRecord {
   /// The version number, incremented on each local change.
   final int version;
 
+  /// Tags for categorizing this record.
+  final Set<String> tags;
+
   /// Create a new [SyncRecord].
   const SyncRecord({
     required this.id,
@@ -44,6 +47,7 @@ class SyncRecord {
     this.status = SyncStatus.pending,
     required this.updatedAt,
     this.version = 1,
+    this.tags = const {},
   });
 
   /// Return a copy of this record with a new [status].
@@ -54,6 +58,19 @@ class SyncRecord {
       status: status,
       updatedAt: updatedAt,
       version: version,
+      tags: tags,
+    );
+  }
+
+  /// Return a copy of this record with the given [tags].
+  SyncRecord withTags(Set<String> tags) {
+    return SyncRecord(
+      id: id,
+      data: data,
+      status: status,
+      updatedAt: updatedAt,
+      version: version,
+      tags: tags,
     );
   }
 
@@ -66,6 +83,7 @@ class SyncRecord {
       status: status,
       updatedAt: DateTime.now(),
       version: version + 1,
+      tags: tags,
     );
   }
 

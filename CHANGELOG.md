@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-02
+
+### Added
+- `SyncRecord.tags` for categorizing records
+- `LocalStore.queryByTag()` for filtering by tag
+- Exponential backoff in `RetryQueue` with configurable base and multiplier
+- `RetryQueue.nextDelay()` to calculate backoff delay
+- `SyncMetadata` class for tracking sync statistics
+- `SyncEngine.syncWhere()` for selective sync by predicate
+- `SyncEngine.metadata` for cumulative sync stats
+
 ## [0.1.0] - 2026-04-01
 
 ### Added

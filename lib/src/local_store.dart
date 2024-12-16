@@ -104,6 +104,11 @@ class LocalStore {
     return _records.values.where(where).toList();
   }
 
+  /// Return all records that contain the given [tag].
+  List<SyncRecord> queryByTag(String tag) {
+    return _records.values.where((r) => r.tags.contains(tag)).toList();
+  }
+
   /// Return aggregate statistics about the store contents.
   StoreStatistics statistics() {
     var pendingCount = 0;
