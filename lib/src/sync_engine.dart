@@ -37,6 +37,17 @@ class SyncEngine {
   /// Whether a sync operation is currently in progress.
   bool get isSyncing => _isSyncing;
 
+  /// Called before a sync cycle starts with the list of pending records.
+  ///
+  /// Return `false` to cancel the sync. Return `true` to proceed.
+  bool Function(List<SyncRecord>)? onBeforeSync;
+
+  /// Called after a sync cycle completes with the [SyncResult].
+  void Function(SyncResult)? onAfterSync;
+
+  /// Called when a conflict is detected between a local and remote record.
+  void Function(SyncRecord local, SyncRecord remote)? onConflict;
+
   /// Create a new [SyncEngine].
   SyncEngine({
     required this.store,
@@ -71,10 +82,18 @@ class SyncEngine {
       var pulledCount = 0;
       var conflictCount = 0;
       var retriedCount = 0;
+      final syncErrors = <SyncError>[];
 
       // Total steps: push pending + retry queued + pull
       const pullSteps = 1;
       final pendingRecords = store.pending();
+
+      // Pre-sync hook
+      if (onBeforeSync != null && !onBeforeSync!(pendingRecords)) {
+        _isSyncing = false;
+        return const SyncResult();
+      }
+
       final queuedRecords = retryQueue.dequeueAll();
       final totalSteps = pendingRecords.length + queuedRecords.length + pullSteps;
       var completedSteps = 0;
@@ -94,10 +113,14 @@ class SyncEngine {
               retryQueue.enqueue(record);
             }
           }
-        } catch (_) {
+        } catch (e) {
           // Push failed entirely — queue all pending records for retry
           for (final record in pendingRecords) {
             retryQueue.enqueue(record);
+            syncErrors.add(SyncError(
+              recordId: record.id,
+              message: 'Push failed: $e',
+            ));
           }
         }
       }
@@ -112,10 +135,14 @@ class SyncEngine {
             store.markSynced(id);
           }
           retriedCount = retriedIds.length;
-        } catch (_) {
+        } catch (e) {
           // Retry failed — re-queue
           for (final record in queuedRecords) {
             retryQueue.enqueue(record);
+            syncErrors.add(SyncError(
+              recordId: record.id,
+              message: 'Retry failed: $e',
+            ));
           }
         }
       }
@@ -130,6 +157,7 @@ class SyncEngine {
             local.status != SyncStatus.synced &&
             local.data.toString() != remote.data.toString()) {
           // Conflict
+          onConflict?.call(local, remote);
           final resolved = resolver.resolve(local, remote);
           store.put(resolved);
           conflictCount++;
@@ -148,9 +176,11 @@ class SyncEngine {
         pulled: pulledCount,
         conflicts: conflictCount,
         retried: retriedCount,
+        errors: syncErrors,
       );
 
       lastSyncResult = result;
+      onAfterSync?.call(result);
       _metadata = _metadata.copyWith(
         lastSyncAt: DateTime.now(),
         lastDuration: stopwatch.elapsed,
@@ -186,11 +216,19 @@ class SyncEngine {
       var pulledCount = 0;
       var conflictCount = 0;
       var retriedCount = 0;
+      final syncErrors = <SyncError>[];
 
       // Total steps: push matching + retry queued + pull
       const pullSteps = 1;
       final pendingRecords =
           store.pending().where(predicate).toList();
+
+      // Pre-sync hook
+      if (onBeforeSync != null && !onBeforeSync!(pendingRecords)) {
+        _isSyncing = false;
+        return const SyncResult();
+      }
+
       final queuedRecords = retryQueue.dequeueAll();
       final totalSteps =
           pendingRecords.length + queuedRecords.length + pullSteps;
@@ -210,9 +248,13 @@ class SyncEngine {
               retryQueue.enqueue(record);
             }
           }
-        } catch (_) {
+        } catch (e) {
           for (final record in pendingRecords) {
             retryQueue.enqueue(record);
+            syncErrors.add(SyncError(
+              recordId: record.id,
+              message: 'Push failed: $e',
+            ));
           }
         }
       }
@@ -227,9 +269,13 @@ class SyncEngine {
             store.markSynced(id);
           }
           retriedCount = retriedIds.length;
-        } catch (_) {
+        } catch (e) {
           for (final record in queuedRecords) {
             retryQueue.enqueue(record);
+            syncErrors.add(SyncError(
+              recordId: record.id,
+              message: 'Retry failed: $e',
+            ));
           }
         }
       }
@@ -243,6 +289,7 @@ class SyncEngine {
         if (local != null &&
             local.status != SyncStatus.synced &&
             local.data.toString() != remote.data.toString()) {
+          onConflict?.call(local, remote);
           final resolved = resolver.resolve(local, remote);
           store.put(resolved);
           conflictCount++;
@@ -261,9 +308,11 @@ class SyncEngine {
         pulled: pulledCount,
         conflicts: conflictCount,
         retried: retriedCount,
+        errors: syncErrors,
       );
 
       lastSyncResult = result;
+      onAfterSync?.call(result);
       _metadata = _metadata.copyWith(
         lastSyncAt: DateTime.now(),
         lastDuration: stopwatch.elapsed,

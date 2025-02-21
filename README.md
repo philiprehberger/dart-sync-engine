@@ -16,7 +16,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  philiprehberger_sync_engine: ^0.2.0
+  philiprehberger_sync_engine: ^0.3.0
 ```
 
 Then run:
@@ -156,6 +156,35 @@ final json = meta.toJson();
 final restored = SyncMetadata.fromJson(json);
 ```
 
+### Sync Hooks
+
+```dart
+engine.onBeforeSync = (pendingRecords) {
+  print('About to sync ${pendingRecords.length} records');
+  return true; // return false to cancel
+};
+
+engine.onAfterSync = (result) {
+  print('Synced: ${result.pushed} pushed, ${result.pulled} pulled');
+};
+
+engine.onConflict = (local, remote) {
+  print('Conflict on ${local.id}');
+};
+```
+
+### Error Handling
+
+```dart
+final result = await engine.sync(push: pushFn, pull: pullFn);
+
+if (result.hasErrors) {
+  for (final error in result.errors) {
+    print('${error.recordId}: ${error.message}');
+  }
+}
+```
+
 ### Querying Records
 
 ```dart
@@ -203,7 +232,13 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 | `SyncMetadata` | `totalPushes`, `totalPulls`, `totalConflicts` | Cumulative counts |
 | `SyncMetadata` | `copyWith(...)` | Copy with updated fields |
 | `SyncMetadata` | `toJson()` / `fromJson(map)` | JSON serialization |
+| `SyncEngine` | `onBeforeSync` | Hook called before sync starts |
+| `SyncEngine` | `onAfterSync` | Hook called after sync completes |
+| `SyncEngine` | `onConflict` | Hook called on conflict detection |
+| `SyncError` | `recordId`, `message`, `timestamp` | Error details for a failed record |
 | `SyncResult` | `pushed`, `pulled`, `conflicts`, `retried` | Individual counts |
+| `SyncResult` | `errors` | List of errors from the sync cycle |
+| `SyncResult` | `hasErrors` | Whether any errors occurred |
 | `SyncResult` | `total` | Sum of all counts |
 
 ## Development

@@ -885,4 +885,123 @@ void main() {
       expect(result.toString(), contains('pulled: 2'));
     });
   });
+
+  // ── Sync Hooks ───────────────────────────────────────────────────────
+
+  group('sync hooks', () {
+    test('onBeforeSync fires with pending records', () async {
+      final store = LocalStore();
+      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      final engine = SyncEngine(
+        store: store,
+        resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
+      );
+
+      List<SyncRecord>? captured;
+      engine.onBeforeSync = (records) {
+        captured = records;
+        return true;
+      };
+
+      await engine.sync(
+        push: (records) async => records.map((r) => r.id).toList(),
+        pull: () async => [],
+      );
+
+      expect(captured, isNotNull);
+      expect(captured!.length, 1);
+      expect(captured!.first.id, '1');
+    });
+
+    test('onBeforeSync returning false cancels sync', () async {
+      final store = LocalStore();
+      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      final engine = SyncEngine(
+        store: store,
+        resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
+      );
+
+      engine.onBeforeSync = (_) => false;
+
+      final result = await engine.sync(
+        push: (records) async => throw StateError('should not be called'),
+        pull: () async => throw StateError('should not be called'),
+      );
+
+      expect(result.pushed, 0);
+      expect(result.pulled, 0);
+    });
+
+    test('onAfterSync fires with result', () async {
+      final store = LocalStore();
+      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      final engine = SyncEngine(
+        store: store,
+        resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
+      );
+
+      SyncResult? captured;
+      engine.onAfterSync = (result) => captured = result;
+
+      await engine.sync(
+        push: (records) async => ['1'],
+        pull: () async => [],
+      );
+
+      expect(captured, isNotNull);
+      expect(captured!.pushed, 1);
+    });
+
+    test('onConflict fires during conflict', () async {
+      final store = LocalStore();
+      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.modified, updatedAt: DateTime(2026)));
+      final engine = SyncEngine(
+        store: store,
+        resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
+      );
+
+      final conflicts = <String>[];
+      engine.onConflict = (local, remote) => conflicts.add(local.id);
+
+      await engine.sync(
+        push: (records) async => [],
+        pull: () async => [SyncRecord(id: '1', data: {'a': 2}, status: SyncStatus.synced, updatedAt: DateTime(2026, 1, 2))],
+      );
+
+      expect(conflicts, ['1']);
+    });
+  });
+
+  // ── SyncResult errors ──────────────────────────────────────────────
+
+  group('SyncResult errors', () {
+    test('captures push errors', () async {
+      final store = LocalStore();
+      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      final engine = SyncEngine(
+        store: store,
+        resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
+      );
+
+      final result = await engine.sync(
+        push: (records) async => throw Exception('network error'),
+        pull: () async => [],
+      );
+
+      expect(result.hasErrors, isTrue);
+      expect(result.errors.length, 1);
+      expect(result.errors.first.recordId, '1');
+      expect(result.errors.first.message, contains('Push failed'));
+    });
+
+    test('SyncError has timestamp', () {
+      final error = SyncError(recordId: 'x', message: 'test');
+      expect(error.timestamp, isNotNull);
+    });
+
+    test('result with no errors has hasErrors false', () {
+      const result = SyncResult(pushed: 1);
+      expect(result.hasErrors, isFalse);
+    });
+  });
 }

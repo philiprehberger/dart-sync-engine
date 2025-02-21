@@ -1,7 +1,7 @@
 name: philiprehberger_sync_engine
 description: >-
   Offline-first data sync with conflict resolution, retry queues, and local caching
-version: 0.2.0
+version: 0.3.0
 homepage: https://philiprehberger.com/open-source-packages/dart/philiprehberger_sync_engine
 repository: https://github.com/philiprehberger/dart-sync-engine
 issue_tracker: https://github.com/philiprehberger/dart-sync-engine/issues
