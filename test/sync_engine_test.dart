@@ -891,7 +891,7 @@ void main() {
   group('sync hooks', () {
     test('onBeforeSync fires with pending records', () async {
       final store = LocalStore();
-      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      store.put(SyncRecord(id: '1', data: {'a': '1'}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
       final engine = SyncEngine(
         store: store,
         resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
@@ -915,7 +915,7 @@ void main() {
 
     test('onBeforeSync returning false cancels sync', () async {
       final store = LocalStore();
-      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      store.put(SyncRecord(id: '1', data: {'a': '1'}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
       final engine = SyncEngine(
         store: store,
         resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
@@ -934,7 +934,7 @@ void main() {
 
     test('onAfterSync fires with result', () async {
       final store = LocalStore();
-      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      store.put(SyncRecord(id: '1', data: {'a': '1'}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
       final engine = SyncEngine(
         store: store,
         resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
@@ -954,7 +954,7 @@ void main() {
 
     test('onConflict fires during conflict', () async {
       final store = LocalStore();
-      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.modified, updatedAt: DateTime(2026)));
+      store.put(SyncRecord(id: '1', data: {'a': '1'}, status: SyncStatus.modified, updatedAt: DateTime(2026)));
       final engine = SyncEngine(
         store: store,
         resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
@@ -965,7 +965,7 @@ void main() {
 
       await engine.sync(
         push: (records) async => [],
-        pull: () async => [SyncRecord(id: '1', data: {'a': 2}, status: SyncStatus.synced, updatedAt: DateTime(2026, 1, 2))],
+        pull: () async => [SyncRecord(id: '1', data: {'a': '2'}, status: SyncStatus.synced, updatedAt: DateTime(2026, 1, 2))],
       );
 
       expect(conflicts, ['1']);
@@ -977,7 +977,7 @@ void main() {
   group('SyncResult errors', () {
     test('captures push errors', () async {
       final store = LocalStore();
-      store.put(SyncRecord(id: '1', data: {'a': 1}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
+      store.put(SyncRecord(id: '1', data: {'a': '1'}, status: SyncStatus.pending, updatedAt: DateTime(2026)));
       final engine = SyncEngine(
         store: store,
         resolver: ConflictResolver(strategy: ConflictStrategy.remoteWins),
