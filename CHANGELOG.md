@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-03
+
+### Added
+- `SyncEngine.onBeforeSync` hook — fires before sync, return `false` to cancel
+- `SyncEngine.onAfterSync` hook — fires after sync with `SyncResult`
+- `SyncEngine.onConflict` hook — fires when a conflict is detected
+- `SyncError` class for structured error reporting
+- `SyncResult.errors` list of `SyncError` objects
+- `SyncResult.hasErrors` convenience getter
+
 ## [0.2.0] - 2026-04-02
 
 ### Added
