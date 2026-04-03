@@ -1,17 +1,30 @@
+import 'dart:math' as math;
+
 import 'sync_record.dart';
 
 /// A queue for records that failed to sync and need to be retried.
 ///
 /// Each record tracks how many attempts have been made. Records that
-/// exceed [maxAttempts] are dropped on dequeue.
+/// exceed [maxAttempts] are dropped on dequeue. Supports exponential
+/// backoff via [nextDelay].
 class RetryQueue {
   /// Maximum number of retry attempts before a record is dropped.
   final int maxAttempts;
 
+  /// Base duration for exponential backoff calculation.
+  final Duration backoffBase;
+
+  /// Multiplier applied per attempt for exponential backoff.
+  final double backoffMultiplier;
+
   final Map<String, _RetryEntry> _entries = {};
 
   /// Create a new [RetryQueue] with the given [maxAttempts].
-  RetryQueue({this.maxAttempts = 3});
+  RetryQueue({
+    this.maxAttempts = 3,
+    this.backoffBase = const Duration(seconds: 1),
+    this.backoffMultiplier = 2.0,
+  });
 
   /// The number of records currently in the queue.
   int get count => _entries.length;
@@ -48,6 +61,17 @@ class RetryQueue {
   /// Return all records currently in the queue without removing them.
   List<SyncRecord> pending() {
     return _entries.values.map((e) => e.record).toList();
+  }
+
+  /// Calculate the backoff delay for the given [attempt] number.
+  ///
+  /// Returns [backoffBase] multiplied by [backoffMultiplier] raised to the
+  /// power of [attempt].
+  Duration nextDelay(int attempt) {
+    final multiplier = math.pow(backoffMultiplier, attempt);
+    return Duration(
+      milliseconds: (backoffBase.inMilliseconds * multiplier).round(),
+    );
   }
 
   /// Remove all records from the queue.

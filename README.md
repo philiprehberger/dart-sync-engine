@@ -16,7 +16,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  philiprehberger_sync_engine: ^0.1.0
+  philiprehberger_sync_engine: ^0.2.0
 ```
 
 Then run:
@@ -94,6 +94,68 @@ await engine.sync(
 );
 ```
 
+### Tagging Records
+
+```dart
+store.put(SyncRecord(
+  id: 'user-1',
+  data: {'name': 'Alice'},
+  updatedAt: DateTime.now(),
+  tags: {'user', 'priority'},
+));
+
+// Query by tag
+final userRecords = store.queryByTag('user');
+
+// Update tags on an existing record
+final updated = record.withTags({'user', 'priority', 'reviewed'});
+store.put(updated);
+```
+
+### Selective Sync
+
+```dart
+// Only push records tagged with 'priority'
+final result = await engine.syncWhere(
+  (record) => record.tags.contains('priority'),
+  push: (records) async {
+    final response = await api.push(records);
+    return response.successIds;
+  },
+  pull: () async => await api.fetchAll(),
+);
+```
+
+### Exponential Backoff
+
+```dart
+final retryQueue = RetryQueue(
+  maxAttempts: 5,
+  backoffBase: Duration(seconds: 1),
+  backoffMultiplier: 2.0,
+);
+
+// Calculate delay for a given attempt
+final delay = retryQueue.nextDelay(2); // 4 seconds (1 * 2^2)
+```
+
+### Sync Metadata
+
+```dart
+await engine.sync(push: pushFn, pull: pullFn);
+
+final meta = engine.metadata;
+print('Last sync: ${meta.lastSyncAt}');
+print('Duration: ${meta.lastDuration}');
+print('Total pushes: ${meta.totalPushes}');
+print('Total pulls: ${meta.totalPulls}');
+print('Total conflicts: ${meta.totalConflicts}');
+
+// Serialize for persistence
+final json = meta.toJson();
+final restored = SyncMetadata.fromJson(json);
+```
+
 ### Querying Records
 
 ```dart
@@ -108,7 +170,9 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 |-------|-------------------|-------------|
 | `SyncRecord` | `SyncRecord(id:, data:, updatedAt:)` | Create a sync record |
 | `SyncRecord` | `withStatus(status)` | Copy with new status |
+| `SyncRecord` | `withTags(tags)` | Copy with new tags |
 | `SyncRecord` | `incrementVersion()` | Copy with version + 1 |
+| `SyncRecord` | `tags` | Tags for categorizing the record |
 | `LocalStore` | `put(record)` | Store a record |
 | `LocalStore` | `putAll(records)` | Store multiple records |
 | `LocalStore` | `get(id)` | Retrieve a record by id |
@@ -118,6 +182,7 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 | `LocalStore` | `markSynced(id)` | Mark record as synced |
 | `LocalStore` | `markModified(id)` | Mark record as modified |
 | `LocalStore` | `query(where:)` | Filter records with a predicate |
+| `LocalStore` | `queryByTag(tag)` | Filter records by tag |
 | `LocalStore` | `statistics()` | Get aggregate counts |
 | `LocalStore` | `count` | Total record count |
 | `LocalStore` | `clear()` | Remove all records |
@@ -126,11 +191,18 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 | `RetryQueue` | `enqueue(record)` | Add a record to retry |
 | `RetryQueue` | `dequeueAll()` | Get and clear all retryable records |
 | `RetryQueue` | `pending()` | View queued records |
+| `RetryQueue` | `nextDelay(attempt)` | Calculate backoff delay for attempt |
 | `RetryQueue` | `count` | Number of queued records |
 | `RetryQueue` | `clear()` | Clear the queue |
 | `SyncEngine` | `sync(push:, pull:, onProgress:)` | Run a sync cycle |
+| `SyncEngine` | `syncWhere(predicate, push:, pull:, onProgress:)` | Selective sync by predicate |
+| `SyncEngine` | `metadata` | Cumulative sync statistics |
 | `SyncEngine` | `lastSyncResult` | Result of the last sync |
 | `SyncEngine` | `isSyncing` | Whether a sync is in progress |
+| `SyncMetadata` | `lastSyncAt`, `lastDuration` | Timing of last sync |
+| `SyncMetadata` | `totalPushes`, `totalPulls`, `totalConflicts` | Cumulative counts |
+| `SyncMetadata` | `copyWith(...)` | Copy with updated fields |
+| `SyncMetadata` | `toJson()` / `fromJson(map)` | JSON serialization |
 | `SyncResult` | `pushed`, `pulled`, `conflicts`, `retried` | Individual counts |
 | `SyncResult` | `total` | Sum of all counts |
 

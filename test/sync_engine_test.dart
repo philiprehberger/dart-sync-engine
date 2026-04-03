@@ -71,6 +71,70 @@ void main() {
       expect(record.toString(), contains('abc'));
       expect(record.toString(), contains('pending'));
     });
+
+    test('creates with default empty tags', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'key': 'value'},
+        updatedAt: DateTime(2026),
+      );
+
+      expect(record.tags, isEmpty);
+    });
+
+    test('creates with explicit tags', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'key': 'value'},
+        updatedAt: DateTime(2026),
+        tags: {'urgent', 'user-data'},
+      );
+
+      expect(record.tags, {'urgent', 'user-data'});
+    });
+
+    test('withTags returns copy with new tags', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'key': 'value'},
+        updatedAt: DateTime(2026),
+        tags: {'old'},
+      );
+
+      final updated = record.withTags({'new', 'fresh'});
+
+      expect(updated.tags, {'new', 'fresh'});
+      expect(updated.id, record.id);
+      expect(updated.data, record.data);
+      expect(updated.status, record.status);
+      expect(updated.version, record.version);
+    });
+
+    test('withStatus preserves tags', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {},
+        updatedAt: DateTime(2026),
+        tags: {'important'},
+      );
+
+      final modified = record.withStatus(SyncStatus.synced);
+
+      expect(modified.tags, {'important'});
+    });
+
+    test('incrementVersion preserves tags', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {},
+        updatedAt: DateTime(2026),
+        tags: {'important'},
+      );
+
+      final incremented = record.incrementVersion();
+
+      expect(incremented.tags, {'important'});
+    });
   });
 
   // ── LocalStore ──────────────────────────────────────────────────────
@@ -240,6 +304,36 @@ void main() {
       store.putAll(records);
 
       expect(store.count, 3);
+    });
+
+    test('queryByTag returns records with matching tag', () {
+      store.put(SyncRecord(
+        id: '1',
+        data: {'name': 'a'},
+        updatedAt: DateTime(2026),
+        tags: {'user', 'active'},
+      ));
+      store.put(SyncRecord(
+        id: '2',
+        data: {'name': 'b'},
+        updatedAt: DateTime(2026),
+        tags: {'user'},
+      ));
+      store.put(SyncRecord(
+        id: '3',
+        data: {'name': 'c'},
+        updatedAt: DateTime(2026),
+        tags: {'config'},
+      ));
+
+      final userRecords = store.queryByTag('user');
+      final activeRecords = store.queryByTag('active');
+      final missingRecords = store.queryByTag('missing');
+
+      expect(userRecords, hasLength(2));
+      expect(activeRecords, hasLength(1));
+      expect(activeRecords.first.id, '1');
+      expect(missingRecords, isEmpty);
     });
 
     test('statistics returns correct counts', () {
@@ -439,6 +533,29 @@ void main() {
       expect(pending, hasLength(1));
       expect(queue.count, 1);
     });
+
+    test('nextDelay calculates exponential backoff', () {
+      final q = RetryQueue(
+        backoffBase: const Duration(seconds: 1),
+        backoffMultiplier: 2.0,
+      );
+
+      expect(q.nextDelay(0), const Duration(seconds: 1)); // 1 * 2^0 = 1
+      expect(q.nextDelay(1), const Duration(seconds: 2)); // 1 * 2^1 = 2
+      expect(q.nextDelay(2), const Duration(seconds: 4)); // 1 * 2^2 = 4
+      expect(q.nextDelay(3), const Duration(seconds: 8)); // 1 * 2^3 = 8
+    });
+
+    test('nextDelay respects custom base and multiplier', () {
+      final q = RetryQueue(
+        backoffBase: const Duration(milliseconds: 500),
+        backoffMultiplier: 3.0,
+      );
+
+      expect(q.nextDelay(0), const Duration(milliseconds: 500));
+      expect(q.nextDelay(1), const Duration(milliseconds: 1500));
+      expect(q.nextDelay(2), const Duration(milliseconds: 4500));
+    });
   });
 
   // ── SyncEngine ──────────────────────────────────────────────────────
@@ -565,6 +682,175 @@ void main() {
       expect(progressUpdates, isNotEmpty);
       // Last progress update should have completed == total
       expect(progressUpdates.last[0], progressUpdates.last[1]);
+    });
+
+    test('metadata tracks cumulative sync stats', () async {
+      store.put(SyncRecord(
+        id: '1',
+        data: {'name': 'a'},
+        status: SyncStatus.pending,
+        updatedAt: DateTime(2026),
+      ));
+
+      expect(engine.metadata.totalPushes, 0);
+      expect(engine.metadata.lastSyncAt, isNull);
+
+      await engine.sync(
+        push: (records) async => records.map((r) => r.id).toList(),
+        pull: () async => [
+          SyncRecord(
+            id: 'r1',
+            data: {'from': 'remote'},
+            updatedAt: DateTime(2026),
+          ),
+        ],
+      );
+
+      expect(engine.metadata.totalPushes, 1);
+      expect(engine.metadata.totalPulls, 1);
+      expect(engine.metadata.totalConflicts, 0);
+      expect(engine.metadata.lastSyncAt, isNotNull);
+      expect(engine.metadata.lastDuration, isNotNull);
+
+      // Run a second sync to verify cumulative tracking
+      store.put(SyncRecord(
+        id: '2',
+        data: {'name': 'b'},
+        status: SyncStatus.pending,
+        updatedAt: DateTime(2026),
+      ));
+
+      await engine.sync(
+        push: (records) async => records.map((r) => r.id).toList(),
+        pull: () async => [],
+      );
+
+      expect(engine.metadata.totalPushes, 2);
+    });
+
+    test('syncWhere only pushes matching records', () async {
+      store.put(SyncRecord(
+        id: '1',
+        data: {'type': 'user'},
+        status: SyncStatus.pending,
+        updatedAt: DateTime(2026),
+        tags: {'user'},
+      ));
+      store.put(SyncRecord(
+        id: '2',
+        data: {'type': 'config'},
+        status: SyncStatus.pending,
+        updatedAt: DateTime(2026),
+        tags: {'config'},
+      ));
+
+      final pushedRecords = <SyncRecord>[];
+      final result = await engine.syncWhere(
+        (r) => r.tags.contains('user'),
+        push: (records) async {
+          pushedRecords.addAll(records);
+          return records.map((r) => r.id).toList();
+        },
+        pull: () async => [],
+      );
+
+      expect(result.pushed, 1);
+      expect(pushedRecords, hasLength(1));
+      expect(pushedRecords.first.id, '1');
+      // Record '1' should be synced, record '2' should still be pending
+      expect(store.get('1')!.status, SyncStatus.synced);
+      expect(store.get('2')!.status, SyncStatus.pending);
+    });
+
+    test('syncWhere updates metadata', () async {
+      store.put(SyncRecord(
+        id: '1',
+        data: {'type': 'user'},
+        status: SyncStatus.pending,
+        updatedAt: DateTime(2026),
+        tags: {'user'},
+      ));
+
+      await engine.syncWhere(
+        (r) => r.tags.contains('user'),
+        push: (records) async => records.map((r) => r.id).toList(),
+        pull: () async => [],
+      );
+
+      expect(engine.metadata.totalPushes, 1);
+      expect(engine.metadata.lastSyncAt, isNotNull);
+    });
+  });
+
+  // ── SyncMetadata ────────────────────────────────────────────────────
+
+  group('SyncMetadata', () {
+    test('creates with default values', () {
+      const meta = SyncMetadata();
+
+      expect(meta.lastSyncAt, isNull);
+      expect(meta.lastDuration, isNull);
+      expect(meta.totalPushes, 0);
+      expect(meta.totalPulls, 0);
+      expect(meta.totalConflicts, 0);
+    });
+
+    test('copyWith replaces specified fields', () {
+      final now = DateTime(2026, 4, 2);
+      const meta = SyncMetadata(totalPushes: 5, totalPulls: 3);
+
+      final updated = meta.copyWith(
+        lastSyncAt: now,
+        lastDuration: const Duration(seconds: 2),
+        totalPushes: 6,
+      );
+
+      expect(updated.lastSyncAt, now);
+      expect(updated.lastDuration, const Duration(seconds: 2));
+      expect(updated.totalPushes, 6);
+      expect(updated.totalPulls, 3); // unchanged
+      expect(updated.totalConflicts, 0); // unchanged
+    });
+
+    test('toJson and fromJson round-trip', () {
+      final now = DateTime(2026, 4, 2, 10, 30);
+      final meta = SyncMetadata(
+        lastSyncAt: now,
+        lastDuration: const Duration(milliseconds: 1500),
+        totalPushes: 10,
+        totalPulls: 8,
+        totalConflicts: 2,
+      );
+
+      final json = meta.toJson();
+      final restored = SyncMetadata.fromJson(json);
+
+      expect(restored.lastSyncAt, now);
+      expect(restored.lastDuration, const Duration(milliseconds: 1500));
+      expect(restored.totalPushes, 10);
+      expect(restored.totalPulls, 8);
+      expect(restored.totalConflicts, 2);
+    });
+
+    test('fromJson handles null optional fields', () {
+      final meta = SyncMetadata.fromJson({
+        'lastSyncAt': null,
+        'lastDuration': null,
+        'totalPushes': 5,
+        'totalPulls': 3,
+        'totalConflicts': 1,
+      });
+
+      expect(meta.lastSyncAt, isNull);
+      expect(meta.lastDuration, isNull);
+      expect(meta.totalPushes, 5);
+    });
+
+    test('toString includes totals', () {
+      const meta = SyncMetadata(totalPushes: 1, totalPulls: 2);
+
+      expect(meta.toString(), contains('totalPushes: 1'));
+      expect(meta.toString(), contains('totalPulls: 2'));
     });
   });
 
