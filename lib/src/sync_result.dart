@@ -16,6 +16,24 @@ class SyncError {
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
+  /// Serialize this error to a JSON-compatible map.
+  Map<String, dynamic> toJson() {
+    return {
+      'recordId': recordId,
+      'message': message,
+      'timestamp': timestamp.toIso8601String(),
+    };
+  }
+
+  /// Deserialize a [SyncError] from a JSON-compatible map.
+  factory SyncError.fromJson(Map<String, dynamic> json) {
+    return SyncError(
+      recordId: json['recordId'] as String,
+      message: json['message'] as String,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+    );
+  }
+
   @override
   String toString() => 'SyncError($recordId: $message)';
 }
@@ -54,6 +72,31 @@ class SyncResult {
 
   /// Total number of records processed during sync.
   int get total => pushed + pulled + conflicts + retried;
+
+  /// Serialize this result to a JSON-compatible map.
+  Map<String, dynamic> toJson() {
+    return {
+      'pushed': pushed,
+      'pulled': pulled,
+      'conflicts': conflicts,
+      'retried': retried,
+      'errors': errors.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  /// Deserialize a [SyncResult] from a JSON-compatible map.
+  factory SyncResult.fromJson(Map<String, dynamic> json) {
+    return SyncResult(
+      pushed: json['pushed'] as int? ?? 0,
+      pulled: json['pulled'] as int? ?? 0,
+      conflicts: json['conflicts'] as int? ?? 0,
+      retried: json['retried'] as int? ?? 0,
+      errors: (json['errors'] as List?)
+              ?.map((e) => SyncError.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+    );
+  }
 
   @override
   String toString() => 'SyncResult(pushed: $pushed, pulled: $pulled, '

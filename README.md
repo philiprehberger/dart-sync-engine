@@ -8,7 +8,7 @@ Offline-first data sync with conflict resolution, retry queues, and local cachin
 
 ## Requirements
 
-- Dart >= 3.5
+- Dart >= 3.6
 
 ## Installation
 
@@ -16,7 +16,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  philiprehberger_sync_engine: ^0.3.0
+  philiprehberger_sync_engine: ^0.4.0
 ```
 
 Then run:
@@ -185,6 +185,20 @@ if (result.hasErrors) {
 }
 ```
 
+### Serialization
+
+```dart
+// Serialize a record to JSON
+final json = record.toJson();
+
+// Restore from JSON
+final restored = SyncRecord.fromJson(json);
+
+// Serialize sync results and statistics
+final resultJson = result.toJson();
+final statsJson = store.statistics().toJson();
+```
+
 ### Querying Records
 
 ```dart
@@ -201,7 +215,10 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 | `SyncRecord` | `withStatus(status)` | Copy with new status |
 | `SyncRecord` | `withTags(tags)` | Copy with new tags |
 | `SyncRecord` | `incrementVersion()` | Copy with version + 1 |
+| `SyncRecord` | `withData(data)` | Copy with new data payload |
 | `SyncRecord` | `tags` | Tags for categorizing the record |
+| `SyncRecord` | `toJson()` | Serialize to JSON map |
+| `SyncRecord` | `SyncRecord.fromJson(map)` | Deserialize from JSON map |
 | `LocalStore` | `put(record)` | Store a record |
 | `LocalStore` | `putAll(records)` | Store multiple records |
 | `LocalStore` | `get(id)` | Retrieve a record by id |
@@ -215,6 +232,8 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 | `LocalStore` | `statistics()` | Get aggregate counts |
 | `LocalStore` | `count` | Total record count |
 | `LocalStore` | `clear()` | Remove all records |
+| `StoreStatistics` | `toJson()` | Serialize to JSON map |
+| `StoreStatistics` | `StoreStatistics.fromJson(map)` | Deserialize from JSON map |
 | `ConflictResolver` | `resolve(local, remote)` | Resolve a conflict |
 | `ConflictResolver` | `resolvedCount` | Number of conflicts resolved |
 | `RetryQueue` | `enqueue(record)` | Add a record to retry |
@@ -236,10 +255,12 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 | `SyncEngine` | `onAfterSync` | Hook called after sync completes |
 | `SyncEngine` | `onConflict` | Hook called on conflict detection |
 | `SyncError` | `recordId`, `message`, `timestamp` | Error details for a failed record |
+| `SyncError` | `toJson()` / `SyncError.fromJson(map)` | JSON serialization |
 | `SyncResult` | `pushed`, `pulled`, `conflicts`, `retried` | Individual counts |
 | `SyncResult` | `errors` | List of errors from the sync cycle |
 | `SyncResult` | `hasErrors` | Whether any errors occurred |
 | `SyncResult` | `total` | Sum of all counts |
+| `SyncResult` | `toJson()` / `SyncResult.fromJson(map)` | JSON serialization |
 
 ## Development
 

@@ -87,6 +87,44 @@ class SyncRecord {
     );
   }
 
+  /// Return a copy of this record with the given [data].
+  SyncRecord withData(Map<String, String> data) {
+    return SyncRecord(
+      id: id,
+      data: data,
+      status: status,
+      updatedAt: updatedAt,
+      version: version,
+      tags: tags,
+    );
+  }
+
+  /// Serialize this record to a JSON-compatible map.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'data': data,
+      'status': status.name,
+      'updatedAt': updatedAt.toIso8601String(),
+      'version': version,
+      'tags': tags.toList(),
+    };
+  }
+
+  /// Deserialize a [SyncRecord] from a JSON-compatible map.
+  factory SyncRecord.fromJson(Map<String, dynamic> json) {
+    return SyncRecord(
+      id: json['id'] as String,
+      data: Map<String, String>.from(json['data'] as Map),
+      status: SyncStatus.values.byName(json['status'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      version: json['version'] as int? ?? 1,
+      tags: json['tags'] != null
+          ? Set<String>.from(json['tags'] as List)
+          : const {},
+    );
+  }
+
   @override
   String toString() =>
       'SyncRecord(id: $id, status: $status, version: $version)';
