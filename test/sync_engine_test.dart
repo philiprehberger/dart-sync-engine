@@ -1004,4 +1004,223 @@ void main() {
       expect(result.hasErrors, isFalse);
     });
   });
+
+  // ── SyncRecord serialization ─────────────────────────────────────────
+
+  group('SyncRecord serialization', () {
+    test('toJson and fromJson round-trip', () {
+      final record = SyncRecord(
+        id: 'user-1',
+        data: {'name': 'Alice', 'email': 'alice@example.com'},
+        status: SyncStatus.modified,
+        updatedAt: DateTime(2026, 4, 11, 10, 30),
+        version: 3,
+        tags: {'user', 'priority'},
+      );
+
+      final json = record.toJson();
+      final restored = SyncRecord.fromJson(json);
+
+      expect(restored.id, 'user-1');
+      expect(restored.data, {'name': 'Alice', 'email': 'alice@example.com'});
+      expect(restored.status, SyncStatus.modified);
+      expect(restored.updatedAt, DateTime(2026, 4, 11, 10, 30));
+      expect(restored.version, 3);
+      expect(restored.tags, {'user', 'priority'});
+    });
+
+    test('toJson includes all fields', () {
+      final record = SyncRecord(
+        id: 'x',
+        data: {'a': 'b'},
+        updatedAt: DateTime(2026),
+        tags: {'t1'},
+      );
+
+      final json = record.toJson();
+
+      expect(json['id'], 'x');
+      expect(json['data'], {'a': 'b'});
+      expect(json['status'], 'pending');
+      expect(json['updatedAt'], isA<String>());
+      expect(json['version'], 1);
+      expect(json['tags'], ['t1']);
+    });
+
+    test('fromJson handles defaults for optional fields', () {
+      final json = {
+        'id': 'x',
+        'data': {'a': 'b'},
+        'status': 'pending',
+        'updatedAt': '2026-01-01T00:00:00.000',
+      };
+
+      final record = SyncRecord.fromJson(json);
+
+      expect(record.version, 1);
+      expect(record.tags, isEmpty);
+    });
+
+    test('fromJson handles all status values', () {
+      for (final status in SyncStatus.values) {
+        final json = {
+          'id': 'x',
+          'data': <String, String>{},
+          'status': status.name,
+          'updatedAt': '2026-01-01T00:00:00.000',
+        };
+
+        final record = SyncRecord.fromJson(json);
+        expect(record.status, status);
+      }
+    });
+  });
+
+  // ── SyncRecord withData ──────────────────────────────────────────────
+
+  group('SyncRecord withData', () {
+    test('returns copy with new data', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'name': 'Alice'},
+        updatedAt: DateTime(2026),
+        version: 2,
+        tags: {'user'},
+      );
+
+      final updated = record.withData({'name': 'Bob', 'role': 'admin'});
+
+      expect(updated.data, {'name': 'Bob', 'role': 'admin'});
+      expect(updated.id, '1');
+      expect(updated.status, SyncStatus.pending);
+      expect(updated.version, 2);
+      expect(updated.tags, {'user'});
+    });
+
+    test('preserves status', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'a': '1'},
+        status: SyncStatus.synced,
+        updatedAt: DateTime(2026),
+      );
+
+      final updated = record.withData({'b': '2'});
+
+      expect(updated.status, SyncStatus.synced);
+    });
+  });
+
+  // ── StoreStatistics serialization ────────────────────────────────────
+
+  group('StoreStatistics serialization', () {
+    test('toJson and fromJson round-trip', () {
+      const stats = StoreStatistics(
+        total: 10,
+        pending: 3,
+        synced: 5,
+        modified: 2,
+      );
+
+      final json = stats.toJson();
+      final restored = StoreStatistics.fromJson(json);
+
+      expect(restored.total, 10);
+      expect(restored.pending, 3);
+      expect(restored.synced, 5);
+      expect(restored.modified, 2);
+    });
+
+    test('toJson includes all fields', () {
+      const stats = StoreStatistics(
+        total: 4,
+        pending: 1,
+        synced: 2,
+        modified: 1,
+      );
+
+      final json = stats.toJson();
+
+      expect(json['total'], 4);
+      expect(json['pending'], 1);
+      expect(json['synced'], 2);
+      expect(json['modified'], 1);
+    });
+  });
+
+  // ── SyncError serialization ──────────────────────────────────────────
+
+  group('SyncError serialization', () {
+    test('toJson and fromJson round-trip', () {
+      final timestamp = DateTime(2026, 4, 11, 12, 0);
+      final error = SyncError(
+        recordId: 'rec-1',
+        message: 'Network timeout',
+        timestamp: timestamp,
+      );
+
+      final json = error.toJson();
+      final restored = SyncError.fromJson(json);
+
+      expect(restored.recordId, 'rec-1');
+      expect(restored.message, 'Network timeout');
+      expect(restored.timestamp, timestamp);
+    });
+  });
+
+  // ── SyncResult serialization ─────────────────────────────────────────
+
+  group('SyncResult serialization', () {
+    test('toJson and fromJson round-trip', () {
+      final result = SyncResult(
+        pushed: 5,
+        pulled: 3,
+        conflicts: 1,
+        retried: 2,
+        errors: [
+          SyncError(
+            recordId: 'r1',
+            message: 'fail',
+            timestamp: DateTime(2026, 4, 11),
+          ),
+        ],
+      );
+
+      final json = result.toJson();
+      final restored = SyncResult.fromJson(json);
+
+      expect(restored.pushed, 5);
+      expect(restored.pulled, 3);
+      expect(restored.conflicts, 1);
+      expect(restored.retried, 2);
+      expect(restored.errors.length, 1);
+      expect(restored.errors.first.recordId, 'r1');
+      expect(restored.errors.first.message, 'fail');
+    });
+
+    test('fromJson handles empty errors list', () {
+      final json = {
+        'pushed': 1,
+        'pulled': 2,
+        'conflicts': 0,
+        'retried': 0,
+        'errors': <dynamic>[],
+      };
+
+      final result = SyncResult.fromJson(json);
+
+      expect(result.hasErrors, isFalse);
+      expect(result.total, 3);
+    });
+
+    test('fromJson handles missing optional fields', () {
+      final result = SyncResult.fromJson(<String, dynamic>{});
+
+      expect(result.pushed, 0);
+      expect(result.pulled, 0);
+      expect(result.conflicts, 0);
+      expect(result.retried, 0);
+      expect(result.errors, isEmpty);
+    });
+  });
 }

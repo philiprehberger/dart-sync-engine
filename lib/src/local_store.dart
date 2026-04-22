@@ -22,6 +22,26 @@ class StoreStatistics {
     required this.modified,
   });
 
+  /// Serialize these statistics to a JSON-compatible map.
+  Map<String, dynamic> toJson() {
+    return {
+      'total': total,
+      'pending': pending,
+      'synced': synced,
+      'modified': modified,
+    };
+  }
+
+  /// Deserialize a [StoreStatistics] from a JSON-compatible map.
+  factory StoreStatistics.fromJson(Map<String, dynamic> json) {
+    return StoreStatistics(
+      total: json['total'] as int,
+      pending: json['pending'] as int,
+      synced: json['synced'] as int,
+      modified: json['modified'] as int,
+    );
+  }
+
   @override
   String toString() => 'StoreStatistics(total: $total, pending: $pending, '
       'synced: $synced, modified: $modified)';
