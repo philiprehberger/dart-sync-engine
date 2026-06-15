@@ -87,6 +87,19 @@ class SyncRecord {
     );
   }
 
+  /// Whether this record's [updatedAt] is older than [olderThan] ago.
+  ///
+  /// Useful for TTL-based eviction and "force refresh" predicates.
+  ///
+  /// ```dart
+  /// if (record.isStale(Duration(hours: 24))) {
+  ///   // refresh from remote
+  /// }
+  /// ```
+  bool isStale(Duration olderThan) {
+    return DateTime.now().toUtc().difference(updatedAt.toUtc()) > olderThan;
+  }
+
   /// Return a copy of this record with the given [data].
   SyncRecord withData(Map<String, String> data) {
     return SyncRecord(

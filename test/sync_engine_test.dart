@@ -1223,4 +1223,33 @@ void main() {
       expect(result.errors, isEmpty);
     });
   });
+
+  group('SyncRecord.isStale', () {
+    test('returns true when updatedAt is older than threshold', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'k': 'v'},
+        updatedAt: DateTime.now().toUtc().subtract(Duration(hours: 2)),
+      );
+      expect(record.isStale(Duration(hours: 1)), isTrue);
+    });
+
+    test('returns false when updatedAt is newer than threshold', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'k': 'v'},
+        updatedAt: DateTime.now().toUtc().subtract(Duration(minutes: 30)),
+      );
+      expect(record.isStale(Duration(hours: 1)), isFalse);
+    });
+
+    test('returns false for fresh record', () {
+      final record = SyncRecord(
+        id: '1',
+        data: {'k': 'v'},
+        updatedAt: DateTime.now().toUtc(),
+      );
+      expect(record.isStale(Duration(seconds: 10)), isFalse);
+    });
+  });
 }

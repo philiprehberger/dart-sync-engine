@@ -4,6 +4,8 @@
 [![pub package](https://img.shields.io/pub/v/philiprehberger_sync_engine.svg)](https://pub.dev/packages/philiprehberger_sync_engine)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/dart-sync-engine)](https://github.com/philiprehberger/dart-sync-engine/commits/main)
 
+![philiprehberger_sync_engine](https://raw.githubusercontent.com/philiprehberger/dart-sync-engine/main/package-card.webp)
+
 Offline-first data sync with conflict resolution, retry queues, and local caching
 
 ## Requirements
@@ -16,7 +18,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  philiprehberger_sync_engine: ^0.4.0
+  philiprehberger_sync_engine: ^0.5.0
 ```
 
 Then run:
@@ -199,6 +201,18 @@ final resultJson = result.toJson();
 final statsJson = store.statistics().toJson();
 ```
 
+### Stale Record Detection
+
+Use `isStale()` to drive TTL-based eviction or force-refresh logic.
+
+```dart
+final fresh = store.query(where: (r) => !r.isStale(Duration(hours: 24)));
+
+if (record.isStale(Duration(minutes: 5))) {
+  // refresh from remote
+}
+```
+
 ### Querying Records
 
 ```dart
@@ -215,6 +229,7 @@ print('Total: ${stats.total}, Synced: ${stats.synced}');
 | `SyncRecord` | `withStatus(status)` | Copy with new status |
 | `SyncRecord` | `withTags(tags)` | Copy with new tags |
 | `SyncRecord` | `incrementVersion()` | Copy with version + 1 |
+| `SyncRecord` | `isStale(olderThan)` | `true` if `updatedAt` is older than the given duration |
 | `SyncRecord` | `withData(data)` | Copy with new data payload |
 | `SyncRecord` | `tags` | Tags for categorizing the record |
 | `SyncRecord` | `toJson()` | Serialize to JSON map |
